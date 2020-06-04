@@ -2,7 +2,8 @@ import { Component, AfterViewInit, ViewChild, ElementRef, HostListener } from '@
 import { fabric } from 'fabric';
 import { IEvent } from 'fabric/fabric-impl';
 
-import { generatePolygon, generatePolygonPreview, uuidv4, generatePosePoint } from './utils';
+import { generatePolygon, generatePolygonPreview, uuidv4 } from './utils';
+import { Area } from './area';
 
 const { Canvas, Image } = fabric;
 
@@ -20,6 +21,7 @@ export class AppComponent implements AfterViewInit {
   @ViewChild('editorContainer') editorContainer: ElementRef;
 
   canvas: fabric.Canvas;
+  areas: { [key: string]: Area } = {};
   transformStyles: { [key: string]: string } = {
     transform: 'translate(0, 0) scale(1)',
   };
@@ -53,6 +55,7 @@ export class AppComponent implements AfterViewInit {
     left: string,
   };
   currentTarget: any;
+  editingArea: Area;
 
   ngAfterViewInit(): void {
     this.canvas = new Canvas('canvas', {
@@ -65,8 +68,16 @@ export class AppComponent implements AfterViewInit {
   }
 
   setBackground(): void {
-    const imageURL = 'https://images.squarespace-cdn.com/content/v1/5bdde6530dbda3230ba6bd5d/1542037787083-LUDEIUFVCQBA4PSM4RKQ/ke17ZwdGBToddI8pDm48kNMIMLR5HyT8T-Jl3SGhJah7gQa3H78H3Y0txjaiv_0fDoOvxcdMmMKkDsyUqMSsMWxHk725yiiHCCLfrh8O1z4YTzHvnKhyp6Da-NYroOW3ZGjoBKy3azqku80C789l0qf8NdpI93-hxF8MNE9FzPo_HfB-tFCGNagDiClHrC5aCYTMbo5wUeomy5kNGMSdfw/Southern+California+Luxury+Home+SFP+1.png?format=2500w';
+    const imageURL = 'assets/img.png';
     Image.fromURL(imageURL, (img) => {
+      // const grayscale = new fabric.Image.filters.Grayscale();
+      // // @ts-ignore
+      // const gamma = new fabric.Image.filters.Gamma({
+      //   gamma: [1,1,0],
+      // });
+      // img.filters.push(grayscale, gamma);
+      // img.applyFilters();
+
       this.canvas.setBackgroundImage(img, this.canvas.renderAll.bind(this.canvas), {
         scaleX: 1,
         scaleY: 1,
@@ -77,13 +88,16 @@ export class AppComponent implements AfterViewInit {
   }
 
   /** LISTENERS SECTION */
-  @HostListener('document: click', ['$event'])
+  @HostListener('document:click', ['$event'])
   onClick(event: MouseEvent): void {
     this.showContextMenu = false;
   }
 
   @HostListener('document:mousemove', ['$event'])
   onMouseMove(event: MouseEvent): void {
+    if (this.currentTarget && this.currentTarget.get('type') === 'circle') {
+      return;
+    }
     if (this.isDragging) {
       this.onEditorTranslate(event);
     }
@@ -196,7 +210,7 @@ export class AppComponent implements AfterViewInit {
 
     const circle = new fabric.Circle({
       radius: 5,
-      fill: '#454545',
+      fill: this.areaPoints.length === 0 ? '#dcbc65' : '#454545',
       stroke: '#454545',
       strokeWidth: 0.5,
       left: x,
@@ -209,11 +223,7 @@ export class AppComponent implements AfterViewInit {
       id: uuidv4(),
       objectCaching: false
     } as any);
-    if (this.areaPoints.length === 0) {
-      circle.set({
-        fill: '#dcbc65'
-      })
-    }
+
     let points = [x, y, x, y];
     const line = new fabric.Line(points, {
       strokeWidth: 2,
@@ -291,9 +301,19 @@ export class AppComponent implements AfterViewInit {
       this.canvas.remove(line);
     }
     this.canvas.remove(this.activeShape).remove(this.activeLine);
-    const polygon = generatePolygon(points);
-    this.canvas.add(polygon);
+    const area = new Area(this.canvas, points);
+    this.areas[area.id] = area;
     this.exitEditMode();
+  }
+
+  editArea(event: Event): void {
+    this.stopEvent(event);
+    if (this.editingArea) {
+      this.editingArea.toggleEdit();
+      return;
+    }
+    this.editingArea = this.areas[this.currentTarget.id];
+    this.editingArea.toggleEdit();
   }
 
   /** AREA SECTION END */
@@ -337,10 +357,8 @@ export class AppComponent implements AfterViewInit {
   saveSquare(): void {
     const { points } = this.activeShape;
     this.canvas.remove(this.activeShape);
-    const polygon = generatePolygon(points);
-    const posePoint = generatePosePoint(points, 'Point');
-    this.canvas.add(polygon).add(posePoint);
-
+    const area = new Area(this.canvas, points);
+    this.areas[area.id] = area;
     this.exitEditMode();
   }
 

@@ -16,7 +16,8 @@
             <div class="editor__context-menu"
                  [ngStyle]="contextMenuPosition"
                  *ngIf="showContextMenu">
-                {{ currentTarget?.id }}
+                <button type="button"
+                (click)="editArea($event)">EDIT</button>
             </div>
         </div>
     </div>
