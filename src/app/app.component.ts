@@ -2,8 +2,14 @@ import { Component, AfterViewInit, ViewChild, ElementRef, HostListener } from '@
 import { fabric } from 'fabric';
 import { IEvent } from 'fabric/fabric-impl';
 
-import { generatePolygon, generatePolygonPreview, uuidv4 } from './utils';
+import { generatePolygon, generatePolygonPreview, uuidv4, generatePosePoint } from './utils';
+
 const { Canvas, Image } = fabric;
+
+enum Mode {
+  'AREA' = 'AREA',
+  'SQUARE' = 'SQUARE',
+}
 
 @Component({
   selector: 'app-root',
@@ -36,7 +42,7 @@ export class AppComponent implements AfterViewInit {
     y: number,
   };
 
-  addAreaMode: boolean;
+  mode: Mode;
   areaPoints: any[] = [];
   areaLines: any[] = [];
   activeShape: any;
@@ -87,6 +93,10 @@ export class AppComponent implements AfterViewInit {
     this.canvas.on('mouse:down', (event: IEvent) => {
       this.setCurrentTarget(event);
       this.updateArea(event);
+
+      if (this.mode === Mode.SQUARE) {
+        this.processSquare(event);
+      }
     });
   }
 
@@ -148,6 +158,7 @@ export class AppComponent implements AfterViewInit {
     this.transform.y = this.initTransform.y + deltaY;
     this.setTransformStyles();
   }
+
   /** LISTENERS SECTION END */
 
   setCurrentTarget(event: IEvent): void {
@@ -165,7 +176,7 @@ export class AppComponent implements AfterViewInit {
   /** AREA SECTION */
   switchToAddAreaMode(event: Event): void {
     this.stopEvent(event);
-    this.addAreaMode = true;
+    this.mode = Mode.AREA;
     this.showActiveLine();
   }
 
@@ -173,7 +184,7 @@ export class AppComponent implements AfterViewInit {
     if (event.target && this.areaPoints.length && (event.target as any).id === this.areaPoints[0].id) {
       this.generateArea();
     }
-    if (this.addAreaMode) {
+    if (this.mode === Mode.AREA) {
       this.addPoint(event);
     }
   }
@@ -282,18 +293,67 @@ export class AppComponent implements AfterViewInit {
     this.canvas.remove(this.activeShape).remove(this.activeLine);
     const polygon = generatePolygon(points);
     this.canvas.add(polygon);
-    this.cancelAreaAdd();
+    this.exitEditMode();
   }
 
-  cancelAreaAdd(): void {
+  /** AREA SECTION END */
+
+  /** SQUARE SECTION */
+  switchToAddSquareMode(event: Event): void {
+    this.stopEvent(event);
+    this.mode = Mode.SQUARE;
+  }
+
+  processSquare(event: IEvent): void {
+    if (!this.activeShape) {
+      this.createSquare(event);
+      this.onUpdateSquare();
+      return;
+    }
+    this.saveSquare();
+  }
+
+  createSquare(event: IEvent): void {
+    const points = new Array(4).fill(event.pointer);
+    this.activeShape = generatePolygonPreview(points)
+    this.canvas.add(this.activeShape);
+  }
+
+  onUpdateSquare(): void {
+    this.canvas.on('mouse:move', (event: IEvent) => {
+      const [initCoords] = this.activeShape.points;
+      this.activeShape.set({
+        points: [
+          initCoords,
+          { x: initCoords.x, y: event.pointer.y },
+          event.pointer,
+          { x: event.pointer.x, y: initCoords.y },
+        ],
+      });
+      this.canvas.renderAll();
+    });
+  }
+
+  saveSquare(): void {
+    const { points } = this.activeShape;
+    this.canvas.remove(this.activeShape);
+    const polygon = generatePolygon(points);
+    const posePoint = generatePosePoint(points, 'Point');
+    this.canvas.add(polygon).add(posePoint);
+
+    this.exitEditMode();
+  }
+
+  /** SQUARE SECTION END*/
+
+  exitEditMode(): void {
     this.activeLine = null;
     this.activeShape = null;
-    this.addAreaMode = false;
+    this.mode = null;
     this.areaLines = [];
     this.areaPoints = [];
     this.canvas.off('mouse:move');
   }
-  /** AREA SECTION END */
 
   switchToAddWayPointMode(event: Event): void {
     this.stopEvent(event);
